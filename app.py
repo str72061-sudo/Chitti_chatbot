@@ -78,8 +78,12 @@ if prompt:
                     {"role": "assistant", "content": answer}
                 )
             except Exception as error:
+                # Show the API error class and message, but never print the API key.
                 st.error(
-                    "I couldn't reach Groq. Check that GROQ_API_KEY is correct "
-                    "and active, and that your Groq account has available usage."
+                    f"Groq request failed: {type(error).__name__}: {error}"
+                )
+                st.caption(
+                    "If this says authentication or invalid API key, create a "
+                    "fresh key in Groq Console and replace GROQ_API_KEY in Render."
                 )
                 st.session_state.messages.pop()
