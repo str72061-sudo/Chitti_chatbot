@@ -1,7 +1,7 @@
 import os
 
 import streamlit as st
-from google import genai
+from groq import Groq
 
 st.set_page_config(
     page_title="Chitti Chatbot",
@@ -10,31 +10,31 @@ st.set_page_config(
 )
 
 st.title("🤖 Chitti Chatbot")
-st.caption("Your friendly AI assistant, powered by Google Gemini.")
+st.caption("Your friendly AI assistant, powered by Groq.")
 
-api_key = os.getenv("GEMINI_API_KEY")
+api_key = os.getenv("GROQ_API_KEY")
 if not api_key:
     try:
-        api_key = st.secrets.get("GEMINI_API_KEY")
+        api_key = st.secrets.get("GROQ_API_KEY")
     except Exception:
         api_key = None
 
 if not api_key:
     st.warning(
-        "Chitti needs a Gemini API key. Add GEMINI_API_KEY in your Render "
+        "Chitti needs a Groq API key. Add GROQ_API_KEY in your Render "
         "service's Environment settings, then redeploy."
     )
-    st.link_button("Get a Gemini API key", "https://aistudio.google.com/apikey")
+    st.link_button("Get a Groq API key", "https://console.groq.com/keys")
     st.stop()
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+MODEL_NAME = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 SYSTEM_INSTRUCTION = (
     "You are Chitti, a helpful, friendly AI assistant. "
     "Answer clearly and accurately. Use simple language when appropriate. "
     "If you are unsure, say so rather than making up facts."
 )
 
-client = genai.Client(api_key=api_key)
+client = Groq(api_key=api_key)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -58,32 +58,28 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    conversation = "\n".join(
-        f'{ "User" if item["role"] == "user" else "Chitti" }: {item["content"]}'
-        for item in st.session_state.messages
-    )
-
     with st.chat_message("assistant"):
         with st.spinner("Chitti is thinking..."):
             try:
-                # The Interactions API supports Google's newer AQ authorization keys.
-                interaction = client.interactions.create(
+                completion = client.chat.completions.create(
                     model=MODEL_NAME,
-                    input=conversation,
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    store=False,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_INSTRUCTION},
+                        *st.session_state.messages,
+                    ],
+                    temperature=0.7,
+                    max_completion_tokens=2048,
                 )
-                answer = interaction.output_text or (
+                answer = completion.choices[0].message.content or (
                     "I couldn't generate a text response. Please try again."
                 )
                 st.markdown(answer)
                 st.session_state.messages.append(
                     {"role": "assistant", "content": answer}
                 )
-            except Exception:
+            except Exception as error:
                 st.error(
-                    "I couldn't reach Gemini. Check the GEMINI_API_KEY in Render, "
-                    "that the key is active, and that your Gemini API quota is available."
+                    "I couldn't reach Groq. Check that GROQ_API_KEY is correct "
+                    "and active, and that your Groq account has available usage."
                 )
-                if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-                    st.session_state.messages.pop()
+                st.session_state.messages.pop()
