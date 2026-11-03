@@ -2,7 +2,6 @@ import os
 
 import streamlit as st
 from google import genai
-from google.genai import types
 
 st.set_page_config(
     page_title="Chitti Chatbot",
@@ -13,7 +12,6 @@ st.set_page_config(
 st.title("🤖 Chitti Chatbot")
 st.caption("Your friendly AI assistant, powered by Google Gemini.")
 
-# Read the key from Render environment variables first, then Streamlit secrets.
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     try:
@@ -23,17 +21,13 @@ if not api_key:
 
 if not api_key:
     st.warning(
-        "The chatbot is deployed, but it needs a Gemini API key before it can answer. "
-        "In your Render dashboard, open this service → Environment and add "
-        "GEMINI_API_KEY with your Google AI Studio API key, then save and redeploy."
+        "Chitti needs a Gemini API key. Add GEMINI_API_KEY in your Render "
+        "service's Environment settings, then redeploy."
     )
-    st.link_button(
-        "Get a Gemini API key",
-        "https://aistudio.google.com/apikey",
-    )
+    st.link_button("Get a Gemini API key", "https://aistudio.google.com/apikey")
     st.stop()
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 SYSTEM_INSTRUCTION = (
     "You are Chitti, a helpful, friendly AI assistant. "
     "Answer clearly and accurately. Use simple language when appropriate. "
@@ -64,38 +58,32 @@ if prompt:
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    contents = []
-    for message in st.session_state.messages:
-        role = "user" if message["role"] == "user" else "model"
-        contents.append(
-            types.Content(
-                role=role,
-                parts=[types.Part.from_text(text=message["content"])],
-            )
-        )
+    conversation = "\n".join(
+        f'{ "User" if item["role"] == "user" else "Chitti" }: {item["content"]}'
+        for item in st.session_state.messages
+    )
 
     with st.chat_message("assistant"):
         with st.spinner("Chitti is thinking..."):
             try:
-                response = client.models.generate_content(
+                # The Interactions API supports Google's newer AQ authorization keys.
+                interaction = client.interactions.create(
                     model=MODEL_NAME,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_INSTRUCTION,
-                        temperature=0.7,
-                    ),
+                    input=conversation,
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    store=False,
                 )
-                answer = response.text or "I couldn't generate a text response. Please try again."
+                answer = interaction.output_text or (
+                    "I couldn't generate a text response. Please try again."
+                )
                 st.markdown(answer)
                 st.session_state.messages.append(
                     {"role": "assistant", "content": answer}
                 )
-            except Exception as exc:
+            except Exception:
                 st.error(
-                    "I couldn't reach Gemini. Check that your API key is valid, "
-                    "the selected model is available, and your API quota has not been exceeded."
+                    "I couldn't reach Gemini. Check the GEMINI_API_KEY in Render, "
+                    "that the key is active, and that your Gemini API quota is available."
                 )
-                st.caption(f"Technical details: {exc}")
-                # Remove the unanswered prompt so the user can retry.
                 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
                     st.session_state.messages.pop()
